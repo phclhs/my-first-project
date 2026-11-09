@@ -140,6 +140,7 @@ textarea#text { border: 0; background: transparent; resize: none; outline: none;
 .sent.done { color: var(--muted); }
 .sent.now { background: var(--accent-soft); color: var(--ink); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .sent mark { background: var(--hl); color: inherit; border-radius: 2px; }
+.skip { color: var(--muted); opacity: 0.6; }
 .doc-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 7px 14px; border-top: 1px solid var(--line); font: 400 0.75rem var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .msg { margin: 0; padding: 0 4px; font-size: 0.85rem; color: var(--muted); }
 .msg[data-kind="error"] { color: var(--danger); }
@@ -310,8 +311,8 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
       <legend>읽는 언어</legend>
       <div class="seg">
         <label><input type="radio" name="mode" value="auto" checked><span class="seg-opt">자동</span></label>
-        <label><input type="radio" name="mode" value="ko"><span class="seg-opt">한국어</span></label>
-        <label><input type="radio" name="mode" value="en"><span class="seg-opt">English</span></label>
+        <label><input type="radio" name="mode" value="ko"><span class="seg-opt">한국어만</span></label>
+        <label><input type="radio" name="mode" value="en"><span class="seg-opt">영어만</span></label>
       </div>
       <p class="note" id="mode-hint"></p>
     </fieldset>
@@ -355,6 +356,8 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
 
     <label class="check"><input type="checkbox" id="clean" checked><span>마크다운 기호 빼고 읽기<br><span class="note">제목 #, 굵게 **, 링크 주소, [[위키링크]], 코드 블록 등을 읽지 않습니다.</span></span></label>
 
+    <label class="check"><input type="checkbox" id="gloss" checked><span>괄호 속 원어 표기는 읽지 않기<br><span class="note">‘립부 탄(Lip-Bu Tan)’처럼 같은 이름이 괄호로 한 번 더 나오면 문장의 주 언어 쪽 한 가지만 읽습니다. ‘한국어만’·‘영어만’에서는 한쪽만 남으므로 항상 한 번만 읽힙니다.</span></span></label>
+
     <div class="install" id="install" hidden>
       <strong>앱으로 설치</strong>
       <p class="note" id="install-text">홈 화면에 추가하면 주소창 없이 앱처럼 열리고, 인터넷이 없어도 실행됩니다. 소리는 기기에 설치된 음성으로 냅니다.</p>
@@ -390,8 +393,8 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
 
   const MODE_HINT = {
     auto: '문장마다 한글 비중을 보고 한국어 또는 영어 음성을 고릅니다.',
-    ko: '모든 문장을 한국어 음성으로 읽습니다. 영어 단어는 한국식 발음으로 읽힐 수 있습니다.',
-    en: '모든 문장을 영어 음성으로 읽습니다. 한글은 건너뛰거나 읽지 못할 수 있습니다.'
+    ko: '한국어만 읽습니다. 영어 단어와 거기에 붙은 쉼표·마침표는 건너뜁니다.',
+    en: '영어만 읽습니다. 한글과 거기에 붙은 쉼표·마침표는 건너뜁니다.'
   };
   const PREVIEW = { ko: '안녕하세요. 이 음성으로 읽어 드립니다.', en: 'Hello. This is how this voice sounds.' };
   const LANG_NAME = { ko: '한국어', en: 'English' };
@@ -402,7 +405,7 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
   };
-  const S = Object.assign({ mode: 'auto', ko: '', en: '', rate: 1, pitch: 1, volume: 1, clean: true }, (() => {
+  const S = Object.assign({ mode: 'auto', ko: '', en: '', rate: 1, pitch: 1, volume: 1, clean: true, gloss: true }, (() => {
     try { return JSON.parse(store.get('tts.settings') || '{}') || {}; } catch (e) { return {}; }
   })());
   const saveSettings = () => store.set('tts.settings', JSON.stringify(S));
@@ -416,7 +419,7 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     bar: $('bar'), status: $('status'), msg: $('msg'),
     vko: $('v-ko'), ven: $('v-en'), pvko: $('pv-ko'), pven: $('pv-en'), nko: $('note-ko'), nen: $('note-en'),
     rate: $('rate'), pitch: $('pitch'), volume: $('volume'),
-    clean: $('clean'), hint: $('mode-hint'), sheet: $('sheet'), tip: $('tip-voice'),
+    clean: $('clean'), gloss: $('gloss'), hint: $('mode-hint'), sheet: $('sheet'), tip: $('tip-voice'),
     install: $('install'), installText: $('install-text'), btnInstall: $('btn-install')
   };
 
@@ -508,6 +511,93 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     }).filter((p) => p.text);
   }
 
+  // ---------- language filter ----------
+  // In "한국어만" / "영어만" mode the other language is left out together with the punctuation attached to it,
+  // so the voice never reads a stray "dot" or "comma" for text it cannot speak.
+  const KO_CH = /[ᄀ-ᇿ㄰-㆏가-힯]/;
+  const EN_CH = /[A-Za-zÀ-ɏ]/;
+  const OPENER = /["'“‘(\[{「『《〈]/;
+  const WORD = /[\p{L}\p{N}]/u;
+  const BRACKET = /[()（）\[\]]/;
+
+  function keepOnly(text, lang) {
+    const n = text.length;
+    const cls = new Array(n);
+    for (let i = 0; i < n; i++) cls[i] = KO_CH.test(text[i]) ? 'ko' : EN_CH.test(text[i]) ? 'en' : null;
+    // Spaces, digits and punctuation belong to the word before them. An opening quote or bracket right
+    // before a letter, and anything before the first letter, belongs to the word after it.
+    const owner = new Array(n);
+    let before = null;
+    for (let i = 0; i < n; i++) { if (cls[i]) before = cls[i]; owner[i] = cls[i] || before; }
+    let after = null;
+    for (let i = n - 1; i >= 0; i--) {
+      if (cls[i]) { after = cls[i]; continue; }
+      if (!owner[i] || (OPENER.test(text[i]) && cls[i + 1])) owner[i] = after;
+    }
+    const keep = new Uint8Array(n);
+    // brackets are never spoken, and the ones left over from a dropped gloss would only be noise
+    for (let i = 0; i < n; i++) if ((owner[i] || lang) === lang && !BRACKET.test(text[i])) keep[i] = 1;
+    return fromKeep(text, keep, true);
+  }
+
+  // Build the spoken text from a per-character keep mask. map: spoken index -> index in the shown text.
+  // join: put a space where dropped words sat between two kept ones, so "Tan" + "CEO" does not become "TanCEO".
+  // Hangul next to Hangul stays glued, because a dropped foreign word must not split "탄" from its particle "이".
+  function fromKeep(text, keep, join) {
+    let out = '';
+    const map = [];
+    let last = -1;
+    let dropped = false;
+    for (let i = 0; i < text.length; i++) {
+      if (!keep[i]) { dropped = true; continue; }
+      if (join && last >= 0 && i - last > 1 && /\S/.test(text[last]) && /\S/.test(text[i]) && !(KO_CH.test(text[last]) && KO_CH.test(text[i]))) {
+        out += ' ';
+        map.push(last + 1);
+      }
+      out += text[i];
+      map.push(i);
+      last = i;
+    }
+    if (!dropped) return { text, map: null, keep: null }; // nothing was left out
+    const lead = out.length - out.trimStart().length;
+    const trimmed = out.trim();
+    return { text: trimmed, map: map.slice(lead, lead + trimmed.length), keep };
+  }
+
+  // A name or term followed by its original spelling in brackets, e.g. "립부 탄(Lip-Bu Tan)" or "Lip-Bu Tan(립부 탄)".
+  // The voice would say the same thing twice, so only the part in the sentence's own language is read.
+  const GLOSS_RE = /[ \t]*[(（\[]\s*([^()（）\[\]\n]{1,60}?)\s*[)）\]]/g;
+  const HANGUL_ONLY = /^[ᄀ-ᇿ㄰-㆏가-힯\s·.-]+$/;
+  const NAME_WORD = /^(?:[A-Z][A-Za-z0-9.'’-]*|[a-z]+[A-Z][A-Za-z0-9.'’-]*)$/; // Tan, Lip-Bu, AI, COVID-19, iPhone
+  const NAME_JOIN = new Set(['of', 'the', 'and', 'for', 'de', 'van', 'von', 'al', 'bin']);
+  function isLatinName(s) {
+    const words = s.trim().split(/\s+/);
+    if (words.length > 6 || s.replace(/[^A-Za-z]/g, '').length < 2) return false; // "(A)" is a label, not a name
+    return words.every((w, i) => NAME_WORD.test(w) || (i > 0 && i < words.length - 1 && NAME_JOIN.has(w)));
+  }
+  function dedupeGloss(text, lang) {
+    const keep = new Uint8Array(text.length).fill(1);
+    let found = false;
+    for (const m of text.matchAll(GLOSS_RE)) {
+      const prev = text.slice(0, m.index).trimEnd().slice(-1); // the gloss must follow a word of the main language
+      const isGloss = lang === 'ko'
+        ? KO_CH.test(prev) && isLatinName(m[1])
+        : EN_CH.test(prev) && HANGUL_ONLY.test(m[1]) && m[1].length <= 20;
+      if (!isGloss) continue;
+      keep.fill(0, m.index, m.index + m[0].length);
+      found = true;
+    }
+    return found ? fromKeep(text, keep, false) : { text, map: null, keep: null };
+  }
+
+  // What the voice should say for a sentence, or null when there is nothing to read (other language only, bare punctuation).
+  function speakable(text, lang) {
+    let r;
+    if (S.mode !== 'auto') r = keepOnly(text, lang);
+    else r = S.gloss ? dedupeGloss(text, lang) : { text, map: null, keep: null };
+    return WORD.test(r.text) ? r : null;
+  }
+
   // ---------- voices ----------
   const voices = { ko: [], en: [] };
   const normLang = (l) => (l || '').replace('_', '-').toLowerCase();
@@ -596,7 +686,11 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     for (const s of sentences(src)) {
       const lang = langOf(s.text, prev, dom);
       prev = lang;
-      for (const p of split(src, s.start, s.end, capFor(lang))) segs.push({ ...p, lang });
+      for (const p of split(src, s.start, s.end, capFor(lang))) {
+        const sp = speakable(p.text, lang);
+        // text = what is shown, say = what is spoken, keep/map = which shown characters are spoken
+        if (sp) segs.push({ ...p, lang, say: sp.text, map: sp.map, keep: sp.keep });
+      }
     }
     return { src, segs };
   }
@@ -608,37 +702,69 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     wordIdx = -1;
     let pos = 0;
     const frag = document.createDocumentFragment();
+    // text the voice will not read (other language, bare punctuation) stays visible but dimmed
+    const gap = (str) => {
+      if (!str) return;
+      if (!/\S/.test(str)) { frag.append(str); return; }
+      const e = document.createElement('span');
+      e.className = 'skip';
+      e.textContent = str;
+      frag.append(e);
+    };
     segs.forEach((g, i) => {
-      if (g.start > pos) frag.append(src.slice(pos, g.start));
+      gap(src.slice(pos, g.start));
       const sp = document.createElement('span');
       sp.className = 'sent ' + g.lang;
       sp.lang = g.lang;
       sp.dataset.i = String(i);
-      sp.textContent = g.text;
+      paint(sp, g);
       frag.append(sp);
       spans.push(sp);
       pos = g.end;
     });
-    if (pos < src.length) frag.append(src.slice(pos));
+    gap(src.slice(pos));
     el.reader.append(frag);
     el.reader.scrollTop = 0;
+  }
+
+  // Fill a sentence span with its shown text: parts that are not spoken get .skip, [from, to) gets a <mark>.
+  function paint(sp, g, from = -1, to = -1) {
+    sp.textContent = '';
+    const d = g.text;
+    const kept = g.keep;
+    const flags = (i) => [kept ? kept[i] : 1, i >= from && i < to];
+    let i = 0;
+    while (i < d.length) {
+      const [k, h] = flags(i);
+      let j = i + 1;
+      while (j < d.length) { const [k2, h2] = flags(j); if (k2 !== k || h2 !== h) break; j++; }
+      const piece = d.slice(i, j);
+      if (h || !k) {
+        const e = document.createElement(h ? 'mark' : 'span');
+        if (!h) e.className = 'skip';
+        e.textContent = piece;
+        sp.append(e);
+      } else sp.append(piece);
+      i = j;
+    }
   }
 
   function hiWord(idx, ci, len) {
     const sp = spans[idx];
     const g = model.segs[idx];
-    if (!sp || !g || ci >= g.text.length) return;
-    if (!len) { const m = /^\S+/.exec(g.text.slice(ci)); len = m ? m[0].length : 1; }
-    const mk = document.createElement('mark');
-    mk.textContent = g.text.substr(ci, len);
-    sp.textContent = '';
-    sp.append(g.text.slice(0, ci), mk, g.text.slice(ci + len));
+    if (!sp || !g || ci >= g.say.length) return;
+    if (!len) { const m = /^\S+/.exec(g.say.slice(ci)); len = m ? m[0].length : 1; }
+    const end = Math.min(ci + len, g.say.length);
+    // boundary offsets count characters of the spoken text, so translate them back to the shown text
+    const from = g.map ? g.map[ci] : ci;
+    const to = g.map ? g.map[end - 1] + 1 : end;
+    paint(sp, g, from, to);
     wordIdx = idx;
   }
 
   function mark() {
     if (wordIdx !== -1 && (wordIdx !== cur || state === 'done') && spans[wordIdx]) {
-      spans[wordIdx].textContent = model.segs[wordIdx].text;
+      paint(spans[wordIdx], model.segs[wordIdx]);
       wordIdx = -1;
     }
     spans.forEach((s, i) => {
@@ -729,8 +855,10 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     for (const s of sentences(src)) {
       const lang = langOf(s.text, prev, dom);
       prev = lang;
-      if (lang === 'ko') { ko++; sec += s.text.replace(/\s/g, '').length / 5.2; }
-      else { en++; sec += s.text.length / 14; }
+      const sp = speakable(s.text, lang);
+      if (!sp) continue;
+      if (lang === 'ko') { ko++; sec += sp.text.replace(/\s/g, '').length / 5.2; }
+      else { en++; sec += sp.text.length / 14; }
     }
     const parts = [];
     if (ko) parts.push(`한국어 ${ko}문장`);
@@ -745,7 +873,9 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     if (!synth) return;
     const m = build();
     if (!m.segs.length) {
-      setMsg('읽을 내용이 없습니다. 마크다운 기호만 있는 글이라면 설정에서 ‘마크다운 기호 빼고 읽기’를 꺼 보세요.', 'error');
+      setMsg(S.mode === 'auto'
+        ? '읽을 내용이 없습니다. 마크다운 기호만 있는 글이라면 설정에서 ‘마크다운 기호 빼고 읽기’를 꺼 보세요.'
+        : `${S.mode === 'ko' ? '한국어' : '영어'}로 읽을 글이 없습니다. 설정에서 읽는 언어를 ‘자동’으로 바꿔 보세요.`, 'error');
       return;
     }
     setMsg('');
@@ -777,7 +907,7 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
 
   function enqueue(id, idx) {
     const g = model.segs[idx];
-    const u = new SpeechSynthesisUtterance(g.text);
+    const u = new SpeechSynthesisUtterance(g.say);
     const v = voiceFor(g.lang);
     if (v) { u.voice = v; u.lang = v.lang; } else u.lang = g.lang === 'ko' ? 'ko-KR' : 'en-US';
     u.rate = S.rate; u.pitch = S.pitch; u.volume = S.volume;
@@ -931,6 +1061,8 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
   });
   el.clean.checked = !!S.clean;
   el.clean.addEventListener('change', () => { S.clean = el.clean.checked; saveSettings(); updateInfo(); rebuild(false); });
+  el.gloss.checked = !!S.gloss;
+  el.gloss.addEventListener('change', () => { S.gloss = el.gloss.checked; saveSettings(); updateInfo(); rebuild(true); });
   el.hint.textContent = MODE_HINT[S.mode] || MODE_HINT.auto;
 
   el.vko.addEventListener('change', () => { S.ko = el.vko.value; saveSettings(); applyLive(); });
