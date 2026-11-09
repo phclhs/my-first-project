@@ -520,10 +520,10 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
   const WORD = /[\p{L}\p{N}]/u;
   const BRACKET = /[()（）\[\]]/;
 
-  function keepOnly(text, lang) {
+  function languageMask(text, lang, keep) { // clears keep[] for every character that is not in `lang`
     const n = text.length;
     const cls = new Array(n);
-    for (let i = 0; i < n; i++) cls[i] = KO_CH.test(text[i]) ? 'ko' : EN_CH.test(text[i]) ? 'en' : null;
+    for (let i = 0; i < n; i++) cls[i] = !keep[i] ? null : KO_CH.test(text[i]) ? 'ko' : EN_CH.test(text[i]) ? 'en' : null;
     // Spaces, digits and punctuation belong to the word before them. An opening quote or bracket right
     // before a letter, and anything before the first letter, belongs to the word after it.
     const owner = new Array(n);
@@ -534,10 +534,8 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
       if (cls[i]) { after = cls[i]; continue; }
       if (!owner[i] || (OPENER.test(text[i]) && cls[i + 1])) owner[i] = after;
     }
-    const keep = new Uint8Array(n);
     // brackets are never spoken, and the ones left over from a dropped gloss would only be noise
-    for (let i = 0; i < n; i++) if ((owner[i] || lang) === lang && !BRACKET.test(text[i])) keep[i] = 1;
-    return fromKeep(text, keep, true);
+    for (let i = 0; i < n; i++) if ((owner[i] || lang) !== lang || BRACKET.test(text[i])) keep[i] = 0;
   }
 
   // Build the spoken text from a per-character keep mask. map: spoken index -> index in the shown text.
@@ -575,9 +573,7 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     if (words.length > 6 || s.replace(/[^A-Za-z]/g, '').length < 2) return false; // "(A)" is a label, not a name
     return words.every((w, i) => NAME_WORD.test(w) || (i > 0 && i < words.length - 1 && NAME_JOIN.has(w)));
   }
-  function dedupeGloss(text, lang) {
-    const keep = new Uint8Array(text.length).fill(1);
-    let found = false;
+  function glossMask(text, lang, keep) {
     for (const m of text.matchAll(GLOSS_RE)) {
       const prev = text.slice(0, m.index).trimEnd().slice(-1); // the gloss must follow a word of the main language
       const isGloss = lang === 'ko'
@@ -585,16 +581,42 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
         : EN_CH.test(prev) && HANGUL_ONLY.test(m[1]) && m[1].length <= 20;
       if (!isGloss) continue;
       keep.fill(0, m.index, m.index + m[0].length);
-      found = true;
     }
-    return found ? fromKeep(text, keep, false) : { text, map: null, keep: null };
   }
 
-  // What the voice should say for a sentence, or null when there is nothing to read (other language only, bare punctuation).
+  // Emoji, keycaps (4️⃣), ":four:"-style shortcodes and bullets get read out as descriptions ("keycap four", "bullet")
+  // or add nothing, so none of them are spoken.
+  const EMOJI = (() => {
+    try {
+      return new RegExp('(?:[0-9#*]\\uFE0F?\\u20E3)|\\p{Regional_Indicator}|\\p{Extended_Pictographic}|[\\uFE0E\\uFE0F\\u200D\\u20E3\\u{1F3FB}-\\u{1F3FF}\\u{E0020}-\\u{E007F}]', 'gu');
+    } catch (e) { // older browsers without Unicode property escapes
+      return /(?:[0-9#*]️?⃣)|[\uD83C-\uD83E][\uDC00-\uDFFF]|[☀-➿︎️‍⃣]/g;
+    }
+  })();
+  const SHORTCODE = /(^|[\s(])(:[a-z][a-z0-9_+-]*:)(?=$|[\s.,!?)])/gm;
+  const BULLET = /[•‣◦⁃∙▪▫■□●○◆◇★☆▶▷►◀◁❖◉◎※✓✗✘➤➢]/;
+  const LEAD = /^[·ㆍ▲▼△▽→⇒➔▸▹\s]+/; // only in front of a sentence: elsewhere "한·중·일" or "A → B" carry meaning
+  function symbolMask(text) {
+    const keep = new Uint8Array(text.length).fill(1);
+    for (const m of text.matchAll(EMOJI)) {
+      if (m[0].length === 1 && '©®™'.includes(m[0])) continue; // these are read as words and are worth keeping
+      keep.fill(0, m.index, m.index + m[0].length);
+    }
+    for (const m of text.matchAll(SHORTCODE)) keep.fill(0, m.index + m[1].length, m.index + m[1].length + m[2].length);
+    for (let i = 0; i < text.length; i++) if (BULLET.test(text[i])) keep[i] = 0;
+    const lead = LEAD.exec(text);
+    if (lead) keep.fill(0, 0, lead[0].length);
+    return keep;
+  }
+  // the text without those symbols, used to decide a sentence's language
+  const plain = (text) => fromKeep(text, symbolMask(text), false).text;
+
+  // What the voice should say for a sentence, or null when there is nothing to read (other language only, bare symbols).
   function speakable(text, lang) {
-    let r;
-    if (S.mode !== 'auto') r = keepOnly(text, lang);
-    else r = S.gloss ? dedupeGloss(text, lang) : { text, map: null, keep: null };
+    const keep = symbolMask(text);
+    if (S.mode !== 'auto') languageMask(text, lang, keep);
+    else if (S.gloss) glossMask(text, lang, keep);
+    const r = fromKeep(text, keep, S.mode !== 'auto');
     return WORD.test(r.text) ? r : null;
   }
 
@@ -680,11 +702,11 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
 
   function build() {
     const src = prepared();
-    const dom = detect(src);
+    const dom = detect(plain(src));
     const segs = [];
     let prev = null;
     for (const s of sentences(src)) {
-      const lang = langOf(s.text, prev, dom);
+      const lang = langOf(plain(s.text), prev, dom);
       prev = lang;
       for (const p of split(src, s.start, s.end, capFor(lang))) {
         const sp = speakable(p.text, lang);
@@ -850,10 +872,10 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     el.count.textContent = raw.length.toLocaleString('ko-KR') + '자';
     if (!raw.trim()) { el.info.textContent = ''; ui(); return; }
     const src = prepared();
-    const dom = detect(src);
+    const dom = detect(plain(src));
     let ko = 0, en = 0, sec = 0, prev = null;
     for (const s of sentences(src)) {
-      const lang = langOf(s.text, prev, dom);
+      const lang = langOf(plain(s.text), prev, dom);
       prev = lang;
       const sp = speakable(s.text, lang);
       if (!sp) continue;
