@@ -330,6 +330,10 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     </div>
     <p class="note" id="tip-voice" hidden>PC에서 Microsoft Edge로 열면 이름에 ‘Natural’이 붙은 Microsoft의 부드러운 음성을 쓸 수 있습니다. 이 목록에는 지금 브라우저가 가진 음성만 나옵니다.</p>
 
+    <p class="note" id="note-ios" hidden>아이폰의 웹 앱은 기기에 기본으로 들어 있는 음성만 쓸 수 있습니다. 설정 앱에서 내려받은 ‘고품질·프리미엄’ 음성과 Siri 음성은 여기에 나오지 않습니다.</p>
+
+    <label class="check"><input type="checkbox" id="allvoices"><span>효과음·옛 음성도 목록에 표시<br><span class="note" id="hidden-note">Albert, Bad News 같은 Apple의 효과음 음성과 Fred, Eddy 같은 오래된 합성 음성은 평소에 숨깁니다.</span></span></label>
+
     <fieldset class="field">
       <legend>목소리 톤</legend>
       <div class="chips" id="tones">
@@ -405,7 +409,7 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
   };
-  const S = Object.assign({ mode: 'auto', ko: '', en: '', rate: 1, pitch: 1, volume: 1, clean: true, gloss: true }, (() => {
+  const S = Object.assign({ mode: 'auto', ko: '', en: '', rate: 1, pitch: 1, volume: 1, clean: true, gloss: true, allVoices: false }, (() => {
     try { return JSON.parse(store.get('tts.settings') || '{}') || {}; } catch (e) { return {}; }
   })());
   const saveSettings = () => store.set('tts.settings', JSON.stringify(S));
@@ -419,7 +423,7 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     bar: $('bar'), status: $('status'), msg: $('msg'),
     vko: $('v-ko'), ven: $('v-en'), pvko: $('pv-ko'), pven: $('pv-en'), nko: $('note-ko'), nen: $('note-en'),
     rate: $('rate'), pitch: $('pitch'), volume: $('volume'),
-    clean: $('clean'), gloss: $('gloss'), hint: $('mode-hint'), sheet: $('sheet'), tip: $('tip-voice'),
+    clean: $('clean'), gloss: $('gloss'), hint: $('mode-hint'), sheet: $('sheet'), tip: $('tip-voice'), noteIos: $('note-ios'), allvoices: $('allvoices'), hiddenNote: $('hidden-note'),
     install: $('install'), installText: $('install-text'), btnInstall: $('btn-install')
   };
 
@@ -623,8 +627,18 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
   // ---------- voices ----------
   const voices = { ko: [], en: [] };
   const normLang = (l) => (l || '').replace('_', '-').toLowerCase();
+  // Voices not worth offering: Apple's sound-effect "novelty" voices (Albert, Bells, Zarvox...), the old robotic
+  // Fred / Junior / Kathy / Ralph, and the Eloquence set (Eddy, Flo, Reed...). The "효과음·옛 음성" switch shows them again.
+  const HIDDEN = new Set([
+    'albert', 'bad news', 'bahh', 'bells', 'boing', 'bubbles', 'cellos', 'deranged', 'good news', 'hysterical', 'jester',
+    'organ', 'pipe organ', 'princess', 'superstar', 'trinoids', 'whisper', 'wobble', 'zarvox',
+    'fred', 'junior', 'kathy', 'ralph', 'agnes', 'bruce', 'vicki', 'victoria',
+    'eddy', 'flo', 'grandma', 'grandpa', 'reed', 'rocko', 'sandy', 'shelley'
+  ]);
+  const isHidden = (v) => HIDDEN.has(v.name.replace(/\s*[(（].*$/, '').trim().toLowerCase()); // "Eddy (영어(미국))" -> "eddy"
+  const GOOD = /^(samantha|daniel|karen|moira|tessa|rishi|yuna|alex)\b/i; // Apple's regular voices: the best default when nothing better exists
   // "Soft" voices: neural / natural ones (Microsoft "Online (Natural)", Apple Enhanced/Premium). They go to the top of the list.
-  const isSoft = (v) => /natural|neural|premium|enhanced|siri|online/i.test(v.name);
+  const isSoft = (v) => /natural|neural|premium|enhanced|siri|online|고품질|프리미엄/i.test(v.name);
   function score(v) {
     let s = 0;
     if (isSoft(v)) s += 10;
@@ -632,6 +646,7 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     if (/google/i.test(v.name)) s += 3;
     if (v.default) s += 1;
     if (/^(ko-kr|en-us)$/.test(normLang(v.lang))) s += 1;
+    if (GOOD.test(v.name)) s += 4;
     return s;
   }
   // "Microsoft SunHi Online (Natural) - Korean (Korea)" -> "SunHi (Natural) · ko-KR"
@@ -662,7 +677,14 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
   function loadVoices() {
     if (!synth) return;
     const all = synth.getVoices();
-    const by = (p) => all.filter((v) => normLang(v.lang).startsWith(p)).sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
+    let hidden = 0;
+    const by = (p) => {
+      const list = all.filter((v) => normLang(v.lang).startsWith(p));
+      const kept = S.allVoices ? list : list.filter((v) => !isHidden(v));
+      const use = kept.length ? kept : list; // never leave a language with an empty list
+      if (use === kept) hidden += list.length - kept.length;
+      return use.sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
+    };
     voices.ko = by('ko');
     voices.en = by('en');
     fillSelect(el.vko, voices.ko, S.ko);
@@ -672,6 +694,9 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     const hasMs = all.some((v) => /microsoft/i.test(v.name) && /online|natural/i.test(v.name));
     // The Edge tip is only verified for desktop Edge, so keep it off phones.
     el.tip.hidden = hasMs || EDGE || IOS || ANDROID || all.length === 0;
+    el.noteIos.hidden = !IOS || all.length === 0;
+    el.hiddenNote.textContent = S.allVoices ? '모든 음성을 표시하고 있습니다.'
+      : hidden ? `효과음·옛 음성 ${hidden}개를 숨기고 있습니다.` : '이 기기에는 숨길 음성이 없습니다.';
     ui();
   }
   const voiceFor = (lang) => {
@@ -1087,6 +1112,8 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
   el.gloss.addEventListener('change', () => { S.gloss = el.gloss.checked; saveSettings(); updateInfo(); rebuild(true); });
   el.hint.textContent = MODE_HINT[S.mode] || MODE_HINT.auto;
 
+  el.allvoices.checked = !!S.allVoices;
+  el.allvoices.addEventListener('change', () => { S.allVoices = el.allvoices.checked; saveSettings(); loadVoices(); });
   el.vko.addEventListener('change', () => { S.ko = el.vko.value; saveSettings(); applyLive(); });
   el.ven.addEventListener('change', () => { S.en = el.ven.value; saveSettings(); applyLive(); });
 
