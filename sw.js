@@ -1,5 +1,5 @@
 // Offline shell for 소리내어 읽기. Bump CACHE when the shell files change.
-const CACHE = 'tts-reader-v8';
+const CACHE = 'tts-reader-v9';
 const SHELL = [
   './',
   './index.html',
