@@ -141,15 +141,6 @@ textarea#text { border: 0; background: transparent; resize: none; outline: none;
 .sent.now { background: var(--accent-soft); color: var(--ink); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .sent mark { background: var(--hl); color: inherit; border-radius: 2px; }
 .skip { color: var(--muted); opacity: 0.6; }
-.intake { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 12px; background: var(--accent-soft); }
-.intake span { flex: 1 1 12rem; font-size: 0.9rem; }
-.intake-btns { display: flex; gap: 4px; }
-.help { border: 1px solid var(--line); border-radius: 12px; background: var(--bg); padding: 0 14px; }
-.help summary { cursor: pointer; padding: 12px 0; font-size: 0.9rem; font-weight: 500; }
-.help[open] summary { border-bottom: 1px solid var(--line); margin-bottom: 4px; }
-.help h3 { margin: 14px 0 4px; font-size: 0.85rem; }
-.help ol { margin: 6px 0 10px; padding-left: 1.25em; display: grid; gap: 6px; font-size: 0.85rem; }
-.help code { font: 400 0.75rem var(--font-mono); overflow-wrap: anywhere; user-select: all; }
 .doc-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 7px 14px; border-top: 1px solid var(--line); font: 400 0.75rem var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .msg { margin: 0; padding: 0 4px; font-size: 0.85rem; color: var(--muted); }
 .msg[data-kind="error"] { color: var(--danger); }
@@ -266,14 +257,6 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
   <main class="stage">
     <div class="notice" id="unsupported" role="alert" hidden>이 브라우저는 음성 합성(Web Speech API)을 지원하지 않습니다. Chrome, Edge, Safari, Firefox 최신 버전에서 열어 주세요.</div>
 
-    <div class="intake" id="intake" role="status" hidden>
-      <span id="intake-text"></span>
-      <div class="intake-btns">
-        <button type="button" class="btn solid" id="intake-go">읽기</button>
-        <button type="button" class="btn ghost" id="intake-close">닫기</button>
-      </div>
-    </div>
-
     <section class="panel doc" aria-label="읽을 글">
       <div class="doc-head">
         <div class="tools" id="tools">
@@ -379,26 +362,6 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
 
     <label class="check"><input type="checkbox" id="gloss" checked><span>괄호 속 원어 표기는 읽지 않기<br><span class="note">‘립부 탄(Lip-Bu Tan)’처럼 같은 이름이 괄호로 한 번 더 나오면 문장의 주 언어 쪽 한 가지만 읽습니다. ‘한국어만’·‘영어만’에서는 한쪽만 남으므로 항상 한 번만 읽힙니다.</span></span></label>
 
-    <details class="help">
-      <summary>다른 앱에서 글 보내기 (Slack·Obsidian 등)</summary>
-      <h3>갤럭시(안드로이드)</h3>
-      <ol>
-        <li>Chrome에서 이 앱을 <b>‘앱 설치’</b>로 홈 화면에 추가합니다. 바로가기만 만들면 공유 목록에 안 나올 수 있습니다.</li>
-        <li>다른 앱에서 글을 선택하고 <b>공유</b>를 누르면 목록에 <b>소리내어 읽기</b>가 나옵니다.</li>
-        <li>앱이 열리면 <b>읽기</b>를 누릅니다. 브라우저 규칙상 첫 재생은 직접 눌러야 합니다.</li>
-      </ol>
-      <h3>아이폰</h3>
-      <p class="note">아이폰 Safari는 공유 목록에 웹 앱을 등록할 수 없어서 ‘단축어’로 대신합니다. 한 번만 만들어 두면 됩니다. 이 방법은 홈 화면 앱이 아니라 Safari 탭에서 열립니다.</p>
-      <ol>
-        <li>단축어 앱 → 오른쪽 위 <b>+</b> → 이름을 ‘소리내어 읽기’로 정합니다.</li>
-        <li>설정(ⓘ)에서 <b>공유 시트에 표시</b>를 켜고, 허용 유형은 <b>텍스트</b>만 남깁니다.</li>
-        <li>동작 추가: <b>클립보드에 복사</b> (입력은 ‘단축어 입력’).</li>
-        <li>동작 추가: <b>URL 열기</b>, 주소는 아래 것을 넣습니다.<br><code id="shortcut-url"></code><br><button type="button" class="btn" id="copy-url">주소 복사</button></li>
-        <li>다른 앱에서 글을 선택해 <b>공유 → 소리내어 읽기</b>를 고르면 Safari에서 열립니다. <b>붙여넣고 읽기</b>를 누르세요.</li>
-      </ol>
-      <p class="note">동작 이름은 iOS 버전에 따라 조금 다를 수 있습니다. 글이 아니라 파일이나 링크를 공유하는 앱에서는 내용이 전달되지 않습니다.</p>
-    </details>
-
     <div class="install" id="install" hidden>
       <strong>앱으로 설치</strong>
       <p class="note" id="install-text">홈 화면에 추가하면 주소창 없이 앱처럼 열리고, 인터넷이 없어도 실행됩니다. 소리는 기기에 설치된 음성으로 냅니다.</p>
@@ -461,8 +424,6 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     vko: $('v-ko'), ven: $('v-en'), pvko: $('pv-ko'), pven: $('pv-en'), nko: $('note-ko'), nen: $('note-en'),
     rate: $('rate'), pitch: $('pitch'), volume: $('volume'),
     clean: $('clean'), gloss: $('gloss'), hint: $('mode-hint'), sheet: $('sheet'), tip: $('tip-voice'), noteIos: $('note-ios'), allvoices: $('allvoices'), hiddenNote: $('hidden-note'),
-    intake: $('intake'), intakeText: $('intake-text'), intakeGo: $('intake-go'), intakeClose: $('intake-close'),
-    shortcutUrl: $('shortcut-url'), copyUrl: $('copy-url'),
     install: $('install'), installText: $('install-text'), btnInstall: $('btn-install')
   };
 
@@ -751,7 +712,6 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
   let runId = 0;
   let utter = null; // keep a reference: some browsers drop events from collected utterances
   let held = []; // same, for the utterances queued during playback
-  let spokeOnce = false; // did the engine actually start speaking since the last start()
   let queued = 0; // index of the next sentence that has not been handed to the engine yet
   let dirty = false; // settings changed while paused
   let wordIdx = -1;
@@ -966,7 +926,6 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
       return;
     }
     setMsg('');
-    spokeOnce = false;
     model = m;
     renderReader();
     const from = model.segs.findIndex((g) => g.end > offset);
@@ -1000,7 +959,7 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     if (v) { u.voice = v; u.lang = v.lang; } else u.lang = g.lang === 'ko' ? 'ko-KR' : 'en-US';
     u.rate = S.rate; u.pitch = S.pitch; u.volume = S.volume;
     u.onboundary = (e) => { if (id === runId && e.name !== 'sentence') hiWord(idx, e.charIndex, e.charLength); };
-    u.onstart = () => { if (id !== runId) return; spokeOnce = true; cur = idx; sync(); pump(id); };
+    u.onstart = () => { if (id !== runId) return; cur = idx; sync(); pump(id); };
     u.onend = () => {
       if (id !== runId) return;
       if (idx >= model.segs.length - 1) { state = 'done'; sync(); return; }
@@ -1218,55 +1177,18 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     window.addEventListener('appinstalled', () => { el.install.hidden = true; });
   }
 
-  // ---------- text arriving from another app ----------
-  // A shared text (Android share menu) or "?paste=1" (the iPhone shortcut) opens a banner. Reading has to start from
-  // a tap, because browsers refuse to speak on their own right after a page opens.
-  let intakeKind = '';
-  function showIntake(kind) {
-    intakeKind = kind;
-    el.intake.hidden = false;
-    el.intakeText.textContent = { share: '공유한 글이 도착했습니다. 바로 읽을까요?', paste: '복사해 둔 글을 붙여넣어 읽을까요?', ready: '붙여넣은 글을 읽을까요?' }[kind];
-    el.intakeGo.textContent = { share: '읽기', paste: '붙여넣고 읽기', ready: '읽기' }[kind];
-  }
-  el.intakeClose.addEventListener('click', () => { el.intake.hidden = true; });
-  el.intakeGo.addEventListener('click', async () => {
-    if (intakeKind !== 'paste') { el.intake.hidden = true; start(0); return; }
-    try {
-      const t = await navigator.clipboard.readText();
-      if (!t.trim()) { el.intake.hidden = true; setMsg('클립보드가 비어 있습니다.'); return; }
-      setText(t);
-    } catch (e) {
-      el.intake.hidden = true;
-      setMsg('붙여넣기 권한이 없습니다. 글 입력칸을 길게 눌러 붙여넣어 주세요.', 'error');
-      el.text.focus();
-      return;
-    }
-    el.intake.hidden = true;
-    start(0);
-    // some browsers drop speech that starts after the clipboard prompt: if nothing is heard, offer a plain "읽기" tap
-    setTimeout(() => { if (!spokeOnce && state === 'playing') showIntake('ready'); }, 900);
-  });
-  el.shortcutUrl.textContent = location.href.split(/[?#]/)[0] + '?paste=1';
-  el.copyUrl.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(el.shortcutUrl.textContent);
-      el.copyUrl.textContent = '복사됨';
-      setTimeout(() => { el.copyUrl.textContent = '주소 복사'; }, 1500);
-    } catch (e) {
-      window.getSelection().selectAllChildren(el.shortcutUrl); // clipboard refused: leave the address selected to copy by hand
-    }
-  });
-
   // ---------- boot ----------
   const saved = store.get('tts.text');
   el.text.value = saved !== null ? saved : SAMPLE;
-  let intake = '';
+  // text sent from another app through the system Share menu (installed app on Android)
   try {
     const q = new URLSearchParams(location.search);
     const shared = ['title', 'text', 'url'].map((k) => q.get(k)).filter(Boolean).join('\n\n');
-    if (shared) { el.text.value = shared; persistText(); intake = 'share'; } // Android share menu (installed app)
-    else if (q.get('paste') === '1') intake = 'paste'; // iPhone shortcut: copy, then open this page
-    if (intake && isApp) history.replaceState(null, '', location.pathname);
+    if (shared) {
+      el.text.value = shared;
+      persistText();
+      if (isApp) history.replaceState(null, '', location.pathname);
+    }
   } catch (e) { /* ignore */ }
 
   if (!synth) {
@@ -1278,7 +1200,6 @@ input[type="range"] { width: 100%; height: 28px; margin: 4px 0 0; accent-color: 
     [300, 1200, 3000].forEach((ms) => setTimeout(() => { if (!voices.ko.length || !voices.en.length) loadVoices(); }, ms));
   }
   updateInfo();
-  if (intake) showIntake(intake);
 })();
 </script>
 </body>
